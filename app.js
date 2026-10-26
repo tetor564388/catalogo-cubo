@@ -177,7 +177,8 @@
       if (!window.CONFIG.DROPBOX_APP_KEY || window.CONFIG.DROPBOX_APP_KEY.startsWith('PEGAR')) { aviso('Falta la llave de Dropbox en config.js.', true); return; }
       // Dentro de la app de pantalla de inicio se usa el codigo (Safari no regresa a la app sola)
       const enApp = window.navigator.standalone || matchMedia('(display-mode: standalone)').matches;
-      D.entrar(enApp); if (enApp) $('cajaCodigo').classList.remove('oculto');
+      if (!D.entrar(enApp)) { aviso('Espera un segundo y vuelve a tocar.', true); D.preparar(); return; }
+      if (enApp) $('cajaCodigo').classList.remove('oculto');
     };
     $('btnCodigo').onclick = async () => {
       try { await D.entrarConCodigo($('codigo').value); pantalla('pRevisar'); cargar(); }
@@ -202,7 +203,7 @@
   async function iniciar() {
     conectarEventos();
     try { await D.terminarEntrada(); } catch (e) { aviso(e.message, true); }
-    if (!D.conectado()) { pantalla('pEntrar'); return; }
+    if (!D.conectado()) { try { await D.preparar(); } catch (e) { aviso('No se pudo preparar la entrada a Dropbox.', true); } pantalla('pEntrar'); return; }
     pantalla('pRevisar'); cargar();
   }
   iniciar();

@@ -6,16 +6,25 @@
   // Dropbox-API-Arg necesita ASCII: los acentos van como \uXXXX
   const arg = o => JSON.stringify(o).replace(/[\u007f-\uffff]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
 
-  // conCodigo: Dropbox muestra un codigo para copiar y pegar (sirve dentro de la app de pantalla de inicio)
-  async function entrar(conCodigo) {
-    const v = b64url(crypto.getRandomValues(new Uint8Array(48)));
-    localStorage.setItem(LS.verif, v);
+  // Se prepara la llave por adelantado: iPhone solo deja abrir Dropbox si el toque abre la pagina al instante.
+  let lista = null;
+  async function preparar() {
+    // Se reutiliza la llave guardada: si la app se cierra mientras pegas el codigo, sigue valiendo.
+    let v = localStorage.getItem(LS.verif);
+    if (!v) { v = b64url(crypto.getRandomValues(new Uint8Array(48))); localStorage.setItem(LS.verif, v); }
     const ch = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v)));
-    const p = new URLSearchParams({ client_id: window.CONFIG.DROPBOX_APP_KEY, response_type: 'code', code_challenge: ch,
-      code_challenge_method: 'S256', token_access_type: 'offline' });
-    if (!conCodigo) p.set('redirect_uri', redirect());
-    const url = 'https://www.dropbox.com/oauth2/authorize?' + p;
-    if (conCodigo) window.open(url, '_blank'); else location.href = url;
+    const base = { client_id: window.CONFIG.DROPBOX_APP_KEY, response_type: 'code', code_challenge: ch,
+      code_challenge_method: 'S256', token_access_type: 'offline' };
+    const u = 'https://www.dropbox.com/oauth2/authorize?';
+    lista = { codigo: u + new URLSearchParams(base), redir: u + new URLSearchParams({ ...base, redirect_uri: redirect() }) };
+  }
+
+  // conCodigo: Dropbox muestra un codigo para copiar y pegar (sirve dentro de la app de pantalla de inicio)
+  function entrar(conCodigo) {
+    if (!lista) return false;
+    if (conCodigo) { if (!window.open(lista.codigo, '_blank')) location.href = lista.codigo; }
+    else location.href = lista.redir;
+    return true;
   }
 
   async function token(body) {
@@ -101,5 +110,5 @@
 
   const enlace = async ruta => (await rpc('files/get_temporary_link', { path: ruta })).link;
 
-  window.Dropbox = { entrar, entrarConCodigo, terminarEntrada, conectado, salir, listar, bajarTexto, subirTexto, miniatura, enlace, rpc };
+  window.Dropbox = { preparar, entrar, entrarConCodigo, terminarEntrada, conectado, salir, listar, bajarTexto, subirTexto, miniatura, enlace, rpc };
 })();
