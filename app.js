@@ -4,7 +4,7 @@
   let carpeta = localStorage.getItem(LS_CARPETA) || window.CONFIG.CARPETA_POR_DEFECTO;
   let archivos = [], filas = [], items = [], actual = null, cargando = false;
   let cambios = JSON.parse(localStorage.getItem(LS_CAMBIOS) || '{}'); // revisiones hechas aqui que falta subir
-  const filtros = Object.assign({ vista: 'Por revisar', episodio: '', tipo: '', texto: '' }, JSON.parse(localStorage.getItem(LS_FILTROS) || '{}'));
+  const filtros = Object.assign({ vista: 'Por revisar', episodio: '', tipo: '', texto: '', orden: 'Episodio y escena', fecha: 'Todo' }, JSON.parse(localStorage.getItem(LS_FILTROS) || '{}'));
   const ICONO = { Video: '🎬', Audio: '🎧', Imagen: '🖼️', Guion: '📄' };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const clase = r => 'pastilla r-' + r.split(' ')[0];
@@ -32,7 +32,7 @@
       const entradas = await D.listar(carpeta, true);
       const base = carpeta.replace(/\/$/, '').toLowerCase() + '/';
       archivos = entradas.filter(e => e['.tag'] === 'file' && e.path_lower.startsWith(base))
-        .map(e => ({ rel: e.path_display.slice(base.length), ruta: e.path_display, tam: e.size }))
+        .map(e => ({ rel: e.path_display.slice(base.length), ruta: e.path_display, tam: e.size, modificado: Date.parse(e.client_modified || e.server_modified) || 0 }))
         .filter(a => L.esMedio(a.rel));
       filas = L.leerCsv((await D.bajarTexto(rutaCompleta(L.CSV_NOMBRE))).texto);
       reconstruir();
@@ -83,20 +83,23 @@
     }
   }
   function pintarLista() {
-    const vis = L.filtrar(items, filtros);
+    const ahora = new Date();
+    const vis = L.filtrar(items, filtros, ahora);
+    const porFecha = filtros.orden !== L.ORDENES[0];
+    const grupos = porFecha ? L.agruparPorDia(vis, ahora) : [{ dia: '', items: vis }];
     $('cuenta').textContent = `${vis.length} de ${items.length} archivos`;
     if (observador) observador.disconnect();
     observador = new IntersectionObserver(es => es.forEach(e => {
       if (!e.isIntersecting) return; observador.unobserve(e.target);
       const it = items[+e.target.dataset.i]; if (it) pedirMini(it, e.target.querySelector('.mini'));
     }), { rootMargin: '300px' });
-    $('lista').innerHTML = vis.length ? vis.map(it => `<li data-i="${items.indexOf(it)}">
+    $('lista').innerHTML = vis.length ? grupos.map(g => (g.dia ? `<li class="dia">${esc(g.dia)}</li>` : '') + g.items.map(it => `<li data-i="${items.indexOf(it)}">
       <div class="mini">${ICONO[it.tipo]}</div>
       <div class="txt"><div class="n">${esc(it.nombre)}</div>
       <div class="s">${esc([it.episodio, it.escena, it.toma != null ? 'toma ' + it.toma : '', it.version != null ? 'v' + it.version : ''].filter(Boolean).join(' · ') || 'Sin episodio')}</div>
-      <span class="${clase(it.resultado)}">${esc(it.resultado)}${it.pendiente ? ' ·' : ''}</span></div></li>`).join('')
+      <span class="${clase(it.resultado)}">${esc(it.resultado)}${it.pendiente ? ' ·' : ''}</span> <span class="f">${esc(L.textoFecha(it.modificado, ahora))}</span></div></li>`).join('')).join('')
       : '<p class="suave" style="text-align:center;padding:30px">Nada por aquí 🎉</p>';
-    $('lista').querySelectorAll('li').forEach(li => {
+    $('lista').querySelectorAll('li[data-i]').forEach(li => {
       li.onclick = () => abrir(items[+li.dataset.i]);
       const it = items[+li.dataset.i]; if (it.tipo === 'Imagen' || it.tipo === 'Video') observador.observe(li);
     });
@@ -168,7 +171,9 @@
   // ===== Inicio =====
   function conectarEventos() {
     $('fVista').innerHTML = L.VISTAS.map(v => `<option>${v}</option>`).join('');
-    for (const [id, k] of [['fVista', 'vista'], ['fEpisodio', 'episodio'], ['fTipo', 'tipo'], ['fTexto', 'texto']]) {
+    $('fOrden').innerHTML = L.ORDENES.map(v => `<option>${v}</option>`).join('');
+    $('fFecha').innerHTML = L.FILTROS_FECHA.map(v => `<option>${v}</option>`).join('');
+    for (const [id, k] of [['fOrden', 'orden'], ['fFecha', 'fecha'], ['fVista', 'vista'], ['fEpisodio', 'episodio'], ['fTipo', 'tipo'], ['fTexto', 'texto']]) {
       $(id).value = filtros[k];
       $(id).addEventListener(id === 'fTexto' ? 'input' : 'change', () => { filtros[k] = $(id).value; localStorage.setItem(LS_FILTROS, JSON.stringify(filtros)); pintarLista(); });
     }

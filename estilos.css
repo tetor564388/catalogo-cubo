@@ -42,3 +42,7 @@ select,input,textarea { width:100%; font-size:16px; padding:11px; border-radius:
 nav { position:fixed; left:0; right:0; bottom:0; display:flex; background:#1a1d24; border-top:1px solid var(--borde); padding-bottom:env(safe-area-inset-bottom); }
 nav button { flex:1; background:none; border:0; color:var(--suave); font-size:22px; padding:8px 0 6px; display:flex; flex-direction:column; align-items:center; }
 nav button span { font-size:12px; } nav button.activo { color:var(--texto); }
+
+/* v1.7: titulos por dia y fecha de cada archivo */
+.lista li.dia { background: none; border: none; padding: 14px 4px 4px; font-weight: 600; color: #9aa7b8; font-size: 15px; cursor: default; }
+.lista li .f { color: #9aa7b8; font-size: 12px; }

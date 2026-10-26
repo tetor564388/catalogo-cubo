@@ -9,3 +9,9 @@ Sitio estático, sin servidor. Archivos:
 - test/prueba.js: `node test/prueba.js` (debe decir TODO BIEN)
 
 Publicar: subir la carpeta tal cual (sin test/) a cualquier hosting estático con HTTPS. Poner la URL final en Redirect URIs de la app de Dropbox.
+
+## Novedades (junto con la PC v1.7)
+- **Ordenar por**: Episodio y escena (como antes), Más nuevos primero o Más viejos primero.
+- Cada archivo muestra su fecha y hora (la de Dropbox, ej. "26 oct, 2:15 pm").
+- Al ordenar por fecha, la lista se separa por día: Hoy, Ayer, 24 oct…
+- Filtro de **Fecha**: Todo, Hoy o Últimos 7 días. Se combina con los demás filtros y se recuerda.

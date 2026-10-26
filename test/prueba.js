@@ -62,6 +62,25 @@ P('progreso', () => {
   eq(p.length, 8); eq(p.map(x => x.total), [18, 20, 5, 31, 21, 20, 28, 11]);
   eq(p[0].listas, 1); eq(p[0].conArchivos, 1); eq(p[1].listas, 0); eq(p[1].conArchivos, 1);
 });
+// ===== Fechas (v1.7) =====
+{
+  const ahora = new Date(2026, 9, 26, 15, 0), ms = (...a) => new Date(...a).getTime();
+  P('texto fecha', () => eq(L.textoFecha(ms(2026, 9, 26, 14, 15), ahora), '26 oct, 2:15 pm'));
+  P('texto 12am y otro año', () => eq([L.textoFecha(ms(2026, 0, 3, 0, 5), ahora), L.textoFecha(ms(2025, 11, 31, 12, 0), ahora)], ['3 ene, 12:05 am', '31 dic 2025, 12:00 pm']));
+  P('dia Hoy/Ayer/fecha', () => eq([ms(2026, 9, 26, 0, 1), ms(2026, 9, 25, 23, 59), ms(2026, 9, 24, 9)].map(x => L.diaDe(x, ahora)), ['Hoy', 'Ayer', '24 oct']));
+  P('filtro fecha', () => {
+    assert(L.pasaFecha('Hoy', ms(2026, 9, 26, 1), ahora)); assert(!L.pasaFecha('Hoy', ms(2026, 9, 25, 23), ahora));
+    assert(L.pasaFecha('Últimos 7 días', ms(2026, 9, 20), ahora)); assert(!L.pasaFecha('Últimos 7 días', ms(2026, 9, 19, 23), ahora));
+    assert(L.pasaFecha('Todo', 0, ahora)); assert(!L.pasaFecha('Hoy', 0, ahora));
+  });
+  const its = L.construir([['CUBO_EP02_E001_v1.png', ms(2026, 9, 24, 9)], ['CUBO_EP01_E001_v1.png', ms(2026, 9, 26, 8)], ['CUBO_EP01_E002_v1.mp4', ms(2026, 9, 26, 14)], ['CUBO_EP01_E003_v1.mp4', ms(2026, 9, 25, 10)]].map(([rel, modificado]) => ({ rel, modificado })), []);
+  const nombres = l => l.map(i => i.rel.slice(5, 14));
+  P('orden episodio (default)', () => eq(nombres(L.filtrar(its, {}, ahora)), ['EP01_E001', 'EP01_E002', 'EP01_E003', 'EP02_E001']));
+  P('orden nuevos', () => eq(nombres(L.filtrar(its, { orden: 'Más nuevos primero' }, ahora)), ['EP01_E002', 'EP01_E001', 'EP01_E003', 'EP02_E001']));
+  P('orden viejos', () => eq(nombres(L.filtrar(its, { orden: 'Más viejos primero' }, ahora)), ['EP02_E001', 'EP01_E003', 'EP01_E001', 'EP01_E002']));
+  P('filtro Hoy + tipo', () => eq(nombres(L.filtrar(its, { fecha: 'Hoy', tipo: 'Video' }, ahora)), ['EP01_E002']));
+  P('agrupar por dia', () => eq(L.agruparPorDia(L.filtrar(its, { orden: 'Más nuevos primero' }, ahora), ahora).map(g => g.dia + ':' + g.items.length), ['Hoy:2', 'Ayer:1', '24 oct:1']));
+}
 // Si existe, compara con un CSV escrito por la app de la PC (C#)
 const fs = require('fs'), ruta = __dirname + '/csv-de-la-pc.csv';
 if (fs.existsSync(ruta)) P('CSV de la PC: ida y vuelta exacta', () => { const t = fs.readFileSync(ruta, 'utf8'); eq(L.escribirCsv(L.leerCsv(t)), t); });

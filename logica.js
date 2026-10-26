@@ -151,11 +151,41 @@
     const todo = sin(`${it.rel} ${it.serie} ${it.episodio} ${it.escena} ${it.resultado} ${it.nota}`).toLowerCase();
     return texto.split(/\s+/).filter(Boolean).every(p => todo.includes(sin(p).toLowerCase()));
   }
-  function filtrar(items, f) {
-    return items.filter(it => incluye(f.vista || 'Por revisar', it.resultado) &&
+  // ===== Fechas (v1.7): la fecha es la de modificacion del archivo en Dropbox =====
+  const ORDENES = ['Episodio y escena', 'Más nuevos primero', 'Más viejos primero'];
+  const FILTROS_FECHA = ['Todo', 'Hoy', 'Últimos 7 días'];
+  const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const soloDia = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diasEntre = (f, ahora) => Math.round((soloDia(ahora) - soloDia(f)) / 86400000);
+  const diaCorto = (f, ahora) => `${f.getDate()} ${MESES[f.getMonth()]}` + (f.getFullYear() !== ahora.getFullYear() ? ' ' + f.getFullYear() : '');
+  function textoFecha(ms, ahora) {
+    if (!ms) return ''; const f = new Date(ms); ahora = ahora || new Date(); const h = f.getHours() % 12 || 12;
+    return `${diaCorto(f, ahora)}, ${h}:${pad(f.getMinutes(), 2)} ${f.getHours() < 12 ? 'am' : 'pm'}`;
+  }
+  function diaDe(ms, ahora) {
+    if (!ms) return 'Sin fecha'; const f = new Date(ms); ahora = ahora || new Date(); const d = diasEntre(f, ahora);
+    return d === 0 ? 'Hoy' : d === 1 ? 'Ayer' : diaCorto(f, ahora);
+  }
+  function pasaFecha(filtro, ms, ahora) {
+    if (filtro === 'Hoy') return !!ms && diasEntre(new Date(ms), ahora || new Date()) === 0;
+    if (filtro === 'Últimos 7 días') return !!ms && diasEntre(new Date(ms), ahora || new Date()) < 7;
+    return true;
+  }
+  function filtrar(items, f, ahora) {
+    const vis = items.filter(it => incluye(f.vista || 'Por revisar', it.resultado) &&
       (!f.episodio || (f.episodio === '-' ? !it.episodio : it.episodio === f.episodio)) &&
-      (!f.tipo || it.tipo === f.tipo) && coincide(it, f.texto))
-      .sort((a, b) => (a.episodio + '|' + a.escena + '|' + a.rel).localeCompare(b.episodio + '|' + b.escena + '|' + b.rel));
+      (!f.tipo || it.tipo === f.tipo) && coincide(it, f.texto) && pasaFecha(f.fecha, it.modificado, ahora));
+    if (f.orden === ORDENES[1] || f.orden === ORDENES[2]) {
+      const s = f.orden === ORDENES[1] ? -1 : 1;
+      return vis.sort((a, b) => s * ((a.modificado || 0) - (b.modificado || 0)) || a.rel.localeCompare(b.rel));
+    }
+    return vis.sort((a, b) => (a.episodio + '|' + a.escena + '|' + a.rel).localeCompare(b.episodio + '|' + b.escena + '|' + b.rel));
+  }
+  // Separa la lista ordenada por dia: [{dia:'Hoy', items:[...]}, ...]
+  function agruparPorDia(lista, ahora) {
+    const g = [];
+    for (const it of lista) { const d = diaDe(it.modificado, ahora); if (!g.length || g[g.length - 1].dia !== d) g.push({ dia: d, items: [] }); g[g.length - 1].items.push(it); }
+    return g;
   }
 
   const numero = e => { const m = /\d+/.exec(e || ''); return m ? parseInt(m[0], 10) : 0; };
@@ -177,5 +207,5 @@
     });
   }
 
-  return { R, VISTAS, ESTIMADAS, CSV_NOMBRE, tipoDe, leerNombre, porCarpeta, esMedio, leerCsv, escribirCsv, fechaAhora, construir, calcularResultados, aFilas, fusionar, filtrar, progreso, sin };
+  return { R, VISTAS, ESTIMADAS, CSV_NOMBRE, tipoDe, leerNombre, porCarpeta, esMedio, leerCsv, escribirCsv, fechaAhora, construir, calcularResultados, aFilas, fusionar, filtrar, progreso, sin, ORDENES, FILTROS_FECHA, textoFecha, diaDe, pasaFecha, agruparPorDia };
 });
