@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Catálogo">
+<meta name="theme-color" content="#14161c">
+<meta name="robots" content="noindex, nofollow">
+<title>Catálogo CUBO</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<header>
+  <h1>Catálogo CUBO</h1>
+  <button id="btnRefrescar" class="icono" aria-label="Actualizar">⟳</button>
+</header>
+<div id="aviso" class="aviso oculto"></div>
+
+<main>
+  <section id="pEntrar" class="pantalla oculto">
+    <div class="centro">
+      <img src="icon-192.png" alt="" class="logo">
+      <p>Entra con tu Dropbox para ver tu carpeta Cubo.<br>Solo se hace una vez.</p>
+      <button id="btnEntrar" class="grande azul">Entrar con Dropbox</button>
+      <div id="cajaCodigo" class="oculto">
+        <p>Dropbox te va a mostrar un código. Cópialo, regresa aquí y pégalo:</p>
+        <input id="codigo" placeholder="Pega el código aquí" autocomplete="off" autocapitalize="off">
+        <button id="btnCodigo" class="grande verde">Listo</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="pRevisar" class="pantalla oculto">
+    <div class="filtros">
+      <select id="fVista"></select>
+      <select id="fEpisodio"><option value="">Todos los episodios</option></select>
+      <select id="fTipo">
+        <option value="">Todo tipo</option><option>Video</option><option>Audio</option><option>Imagen</option><option>Guion</option>
+      </select>
+      <input id="fTexto" type="search" placeholder="Buscar…">
+    </div>
+    <p id="cuenta" class="suave"></p>
+    <ul id="lista" class="lista"></ul>
+  </section>
+
+  <section id="pProgreso" class="pantalla oculto"><div id="progreso"></div></section>
+
+  <section id="pAjustes" class="pantalla oculto">
+    <h2>Carpeta</h2>
+    <p class="suave">La app lee esta carpeta de tu Dropbox:</p>
+    <p id="carpetaActual" class="caja"></p>
+    <button id="btnCambiarCarpeta" class="grande">Elegir otra carpeta</button>
+    <div id="explorador" class="oculto">
+      <p id="expRuta" class="caja"></p>
+      <ul id="expLista" class="lista carpetas"></ul>
+      <button id="btnUsarCarpeta" class="grande verde">Usar esta carpeta</button>
+      <button id="btnCancelarCarpeta" class="grande">Cancelar</button>
+    </div>
+    <h2>Cuenta</h2>
+    <button id="btnSalir" class="grande">Salir de Dropbox</button>
+    <p class="suave pequeno">Catálogo CUBO para iPhone · v1.0</p>
+  </section>
+</main>
+
+<div id="detalle" class="detalle oculto">
+  <div class="barra"><button id="btnCerrar" class="icono">‹ Atrás</button><span id="dEstado" class="pastilla"></span></div>
+  <div id="dMedio" class="medio"></div>
+  <h3 id="dNombre"></h3>
+  <p id="dInfo" class="suave"></p>
+  <p id="dNotaVieja" class="nota oculto"></p>
+  <div class="botones">
+    <button id="btnAprobar" class="grande verde">✅ Aprobar</button>
+    <textarea id="dNota" rows="2" placeholder="¿Qué no te gustó? (lo leen los agentes)"></textarea>
+    <button id="btnNoMeGusta" class="grande rojo">❌ No me gusta</button>
+    <button id="btnQuitar" class="grande">↺ Quitar revisión</button>
+  </div>
+</div>
+
+<nav>
+  <button data-p="pRevisar" class="activo">📋<span>Revisar</span></button>
+  <button data-p="pProgreso">📊<span>Progreso</span></button>
+  <button data-p="pAjustes">⚙️<span>Ajustes</span></button>
+</nav>
+
+<script src="config.js"></script>
+<script src="logica.js"></script>
+<script src="dropbox.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
