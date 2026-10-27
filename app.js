@@ -1,9 +1,11 @@
 (function () {
   const L = window.Logica, D = window.Dropbox, $ = id => document.getElementById(id);
-  const LS_CARPETA = 'cubo.carpeta', LS_CAMBIOS = 'cubo.cambios', LS_FILTROS = 'cubo.filtros';
+  const LS_CARPETA = 'cubo.carpeta', LS_CAMBIOS = 'cubo.cambios', LS_FILTROS = 'cubo.filtros', LS_ASIG = 'cubo.asig';
   let carpeta = localStorage.getItem(LS_CARPETA) || window.CONFIG.CARPETA_POR_DEFECTO;
   let archivos = [], filas = [], items = [], actual = null, cargando = false;
   let cambios = JSON.parse(localStorage.getItem(LS_CAMBIOS) || '{}'); // revisiones hechas aqui que falta subir
+  let asigFilas = [], asigCambios = JSON.parse(localStorage.getItem(LS_ASIG) || '{}'); // v1.8: asignaciones que falta subir
+  let borrador = null; // asignacion del panel sin guardar
   const filtros = Object.assign({ vista: 'Por revisar', episodio: '', tipo: '', texto: '', orden: 'Episodio y escena', fecha: 'Todo' }, JSON.parse(localStorage.getItem(LS_FILTROS) || '{}'));
   const ICONO = { Video: '🎬', Audio: '🎧', Imagen: '🖼️', Guion: '📄' };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -24,6 +26,7 @@
     if (id === 'pAjustes') $('carpetaActual').textContent = carpeta;
   }
   const guardarCambios = () => localStorage.setItem(LS_CAMBIOS, JSON.stringify(cambios));
+  const guardarAsigLocal = () => localStorage.setItem(LS_ASIG, JSON.stringify(asigCambios));
 
   // ===== Cargar =====
   async function cargar() {
@@ -35,16 +38,18 @@
         .map(e => ({ rel: e.path_display.slice(base.length), ruta: e.path_display, tam: e.size, modificado: Date.parse(e.client_modified || e.server_modified) || 0 }))
         .filter(a => L.esMedio(a.rel));
       filas = L.leerCsv((await D.bajarTexto(rutaCompleta(L.CSV_NOMBRE))).texto);
+      asigFilas = L.leerAsig((await D.bajarTexto(rutaCompleta(L.ASIG_NOMBRE))).texto);
       reconstruir();
+      if (Object.keys(asigCambios).length) await subirAsig();
       if (Object.keys(cambios).length) await subir();
-      else aviso(`Listo: ${archivos.length} archivos.`, false, 3);
+      else if (!Object.keys(asigCambios).length) aviso(`Listo: ${archivos.length} archivos.`, false, 3);
     } catch (e) {
       if ((e.resumen || '').includes('not_found')) { aviso('No encuentro la carpeta. Elige tu carpeta Cubo en Ajustes.', true); pantalla('pAjustes'); abrirExplorador(''); }
       else aviso('No se pudo leer Dropbox. Revisa tu internet y aprieta ⟳. (' + e.message + ')', true);
     } finally { cargando = false; }
   }
   function reconstruir() {
-    items = L.construir(archivos, filas, cambios);
+    items = L.construir(archivos, filas, cambios, asigFilas, asigCambios);
     const eps = [...new Set(items.map(i => i.episodio).filter(Boolean))].sort();
     $('fEpisodio').innerHTML = '<option value="">Todos los episodios</option>' + eps.map(e => `<option>${esc(e)}</option>`).join('') + '<option value="-">Sin episodio</option>';
     $('fEpisodio').value = filtros.episodio;
@@ -59,7 +64,7 @@
       for (let intento = 0; intento < 4; intento++) {
         const r = await D.bajarTexto(rutaCompleta(L.CSV_NOMBRE));
         const remotas = L.leerCsv(r.texto);
-        const texto = L.fusionar(archivos, remotas, cambios);
+        const texto = L.fusionar(archivos, remotas, cambios, undefined, asigFilas, asigCambios);
         if (await D.subirTexto(rutaCompleta(L.CSV_NOMBRE), texto, r.rev)) {
           filas = L.leerCsv(texto); cambios = {}; guardarCambios(); reconstruir();
           aviso('Guardado ✓ (la PC y los agentes ya lo ven)', false, 3); return;
@@ -67,6 +72,23 @@
       }
       throw new Error('el archivo cambió muchas veces');
     } catch (e) { aviso('Se guardó en el iPhone, pero no en Dropbox todavía. Se intenta otra vez al apretar ⟳. (' + e.message + ')', true); }
+  }
+
+  // v1.8: sube asignaciones.csv igual: baja el ultimo (con rev), une (gana lo mas nuevo, no se pierden filas de la PC) y reintenta si hay 409.
+  async function subirAsig() {
+    aviso('Guardando asignaciones en Dropbox…');
+    try {
+      for (let intento = 0; intento < 4; intento++) {
+        const r = await D.bajarTexto(rutaCompleta(L.ASIG_NOMBRE));
+        const remotas = L.leerAsig(r.texto);
+        const texto = L.fusionarAsig(remotas, asigCambios);
+        if (await D.subirTexto(rutaCompleta(L.ASIG_NOMBRE), texto, r.rev)) {
+          asigFilas = L.leerAsig(texto); asigCambios = {}; guardarAsigLocal(); reconstruir();
+          aviso('Guardado ✓ (la PC con v1.8 ya lo ve)', false, 3); return true;
+        }
+      }
+      throw new Error('el archivo cambió muchas veces');
+    } catch (e) { aviso('Se guardó en el iPhone, pero no en Dropbox todavía. Se intenta otra vez al apretar ⟳. (' + e.message + ')', true); return false; }
   }
 
   // ===== Lista =====
@@ -111,7 +133,7 @@
     $('dNombre').textContent = it.nombre;
     $('dInfo').textContent = [it.episodio, it.escena, it.toma != null ? 'toma ' + it.toma : '', it.version != null ? 'versión ' + it.version : '', it.tipo].filter(Boolean).join(' · ') + (it.rel.includes('/') ? '\n' + it.rel : '');
     $('dNota').value = it.revision === L.R.NoMeGusta ? it.nota : '';
-    pintarEstado();
+    pintarEstado(); llenarAsig(it);
     const m = $('dMedio'); m.innerHTML = '<p class="suave">Cargando…</p>';
     try {
       const u = await D.enlace(it.ruta); if (actual !== it) return;
@@ -130,6 +152,58 @@
     $('dNotaVieja').classList.toggle('oculto', !(it.revision === L.R.NoMeGusta && it.nota));
     $('dNotaVieja').textContent = 'Nota: ' + it.nota;
   }
+  // ===== Asignar (v1.8) =====
+  function opciones(lista, valor, vacio) {
+    if (valor && !lista.includes(valor)) lista = lista.concat([valor]);
+    return `<option value="">${vacio}</option>` + lista.map(v => `<option${v === valor ? ' selected' : ''}>${esc(v)}</option>`).join('');
+  }
+  function seriesConocidas() { return [...new Set(['CUBO'].concat(items.map(i => i.serie).filter(Boolean)))].sort(); }
+  function episodiosDe(serie) {
+    if (!serie) return [];
+    const base = serie === 'CUBO' ? L.ESTIMADAS.map((_, i) => 'EP' + String(i + 1).padStart(2, '0')) : [];
+    return [...new Set(base.concat(items.filter(i => i.serie === serie).map(i => i.episodio).filter(Boolean)))].sort();
+  }
+  function llenarAsig(it) {
+    borrador = { referencia: !!it.refManual };
+    $('aSerie').innerHTML = opciones(seriesConocidas(), it.serie, 'Sin serie');
+    pintarEpisodios(it.episodio);
+    $('aEscena').value = it.episodio ? (it.escena || '').replace(/^E0*/, '') : '';
+    $('aEstado').innerHTML = L.ESTADOS.map(v => `<option${v === it.estado ? ' selected' : ''}>${v}</option>`).join('');
+    $('aEtiquetas').value = it.etiquetas || ''; $('aNotas').value = it.notas || '';
+    pintarRef(); $('aSinGuardar').classList.add('oculto');
+  }
+  function pintarEpisodios(valor) {
+    const s = $('aSerie').value; $('aEpisodio').innerHTML = opciones(episodiosDe(s), valor, 'Sin episodio');
+    $('aEpisodio').disabled = !s; pintarEscena();
+  }
+  function pintarEscena() { const sin = !$('aEpisodio').value; $('aEscena').disabled = sin; if (sin) $('aEscena').value = ''; }
+  function pintarRef() {
+    const porCarpeta = actual && L.porCarpeta(actual.rel);
+    $('btnRef').textContent = porCarpeta ? '📌 Referencia (por su carpeta)' : borrador.referencia ? '📌 Es referencia · tocar para quitar' : '📌 Marcar como referencia';
+    $('btnRef').classList.toggle('morado', borrador.referencia || porCarpeta); $('btnRef').disabled = porCarpeta;
+  }
+  const sinGuardar = () => $('aSinGuardar').classList.remove('oculto');
+  async function guardarAsig() {
+    const it = actual; if (!it) return;
+    const serie = $('aSerie').value, episodio = serie ? $('aEpisodio').value : '';
+    const escena = episodio ? L.normEscena($('aEscena').value) : '';
+    if (escena === null) { $('aEscena').focus(); aviso('La escena va como número: 12 o 12A.', true, 4); return; }
+    const estado = $('aEstado').value, fecha = L.fechaAhora(), k = it.rel.toLowerCase();
+    const nuevo = Object.assign({}, it, { serie, episodio, escena, estado, etiquetas: $('aEtiquetas').value.trim(), notas: $('aNotas').value, refManual: borrador.referencia });
+    asigCambios[k] = L.filaAsig(nuevo, fecha); guardarAsigLocal();
+    // Listo = Aprobado (como en la PC)
+    let rev = false;
+    if (estado === 'Listo' && it.revision !== L.R.Aprobado) { cambios[k] = { revision: L.R.Aprobado, nota: '', fecha }; rev = true; }
+    else if (estado !== 'Listo' && it.revision === L.R.Aprobado) { cambios[k] = { revision: '', nota: '', fecha }; rev = true; }
+    if (rev) guardarCambios();
+    reconstruir(); actual = items.find(x => x.rel === it.rel) || it;
+    abrirTextos(actual); pintarEstado(); llenarAsig(actual);
+    await subirAsig(); if (rev) await subir();
+  }
+  function abrirTextos(it) {
+    $('dInfo').textContent = [it.episodio, it.escena, it.toma != null ? 'toma ' + it.toma : '', it.version != null ? 'versión ' + it.version : '', it.tipo].filter(Boolean).join(' · ') + (it.rel.includes('/') ? '\n' + it.rel : '');
+  }
+
   function cerrar() {
     $('detalle').classList.add('oculto'); $('dMedio').innerHTML = ''; document.body.style.overflow = ''; actual = null;
   }
@@ -190,10 +264,17 @@
       catch (e) { aviso('Ese código no funcionó. Aprieta "Entrar con Dropbox" otra vez.', true); }
     };
     $('btnRefrescar').onclick = cargar;
-    $('btnCerrar').onclick = cerrar;
+    $('btnCerrar').onclick = () => { if (!$('aSinGuardar').classList.contains('oculto') && !confirm('Tienes cambios de asignación sin guardar. ¿Salir sin guardar?')) return; cerrar(); };
     $('btnAprobar').onclick = () => revisar(L.R.Aprobado);
     $('btnNoMeGusta').onclick = () => revisar(L.R.NoMeGusta);
     $('btnQuitar').onclick = () => revisar('');
+    $('aSerie').onchange = () => { pintarEpisodios(''); sinGuardar(); };
+    $('aEpisodio').onchange = () => { pintarEscena(); sinGuardar(); };
+    ['aEscena', 'aEtiquetas', 'aNotas'].forEach(id => $(id).addEventListener('input', sinGuardar));
+    $('aEstado').onchange = sinGuardar;
+    $('btnRef').onclick = () => { borrador.referencia = !borrador.referencia; pintarRef(); sinGuardar(); };
+    $('btnQuitarEp').onclick = () => { $('aEpisodio').value = ''; pintarEscena(); sinGuardar(); };
+    $('btnGuardarAsig').onclick = guardarAsig;
     $('btnCambiarCarpeta').onclick = () => abrirExplorador(carpeta.slice(0, carpeta.lastIndexOf('/')));
     $('btnCancelarCarpeta').onclick = () => $('explorador').classList.add('oculto');
     $('btnUsarCarpeta').onclick = () => {

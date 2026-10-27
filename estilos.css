@@ -46,3 +46,12 @@ nav button span { font-size:12px; } nav button.activo { color:var(--texto); }
 /* v1.7: titulos por dia y fecha de cada archivo */
 .lista li.dia { background: none; border: none; padding: 14px 4px 4px; font-weight: 600; color: #9aa7b8; font-size: 15px; cursor: default; }
 .lista li .f { color: #9aa7b8; font-size: 12px; }
+
+/* v1.8: asignar desde el iPhone */
+.asig { background:var(--panel); border-radius:14px; padding:12px; margin-top:14px; }
+.asig h4 { margin:0 0 6px; font-size:16px; color:#c9ced6; }
+.asig label { display:block; font-size:13px; color:var(--suave); margin:8px 0 0; }
+.asig label select,.asig label input,.asig label textarea { margin-top:4px; background:#262a33; }
+.asig .dos { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.asig select:disabled,.asig input:disabled { opacity:.5; }
+.morado { background:var(--morado) !important; }

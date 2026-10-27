@@ -43,7 +43,7 @@
   function esMedio(rel) { return tipoDe(rel) !== null && !rel.toLowerCase().startsWith(CARPETA_APROBADO + '/'); }
 
   // ===== CSV =====
-  function leerCsv(texto) {
+  function registros(texto) {
     if (!texto) return [];
     if (texto.charCodeAt(0) === 0xFEFF) texto = texto.slice(1);
     const regs = []; let reg = [], campo = '', q = false;
@@ -56,6 +56,10 @@
       else campo += c;
     }
     if (campo.length || reg.length) { reg.push(campo); regs.push(reg); }
+    return regs;
+  }
+  function leerCsv(texto) {
+    const regs = registros(texto);
     if (!regs.length) return [];
     const cab = regs[0].map(x => x.trim().toLowerCase());
     if (cab.indexOf('archivo') < 0 || cab.indexOf('resultado') < 0) return [];
@@ -78,9 +82,72 @@
     return `${d.getFullYear()}-${pad(d.getMonth() + 1, 2)}-${pad(d.getDate(), 2)} ${pad(d.getHours(), 2)}:${pad(d.getMinutes(), 2)}`;
   }
 
+  // ===== Asignaciones (v1.8): asignaciones.csv, lo que se asigna a mano en la PC o aqui =====
+  const ASIG_NOMBRE = 'asignaciones.csv';
+  const COLS_ASIG = ['archivo', 'serie', 'episodio', 'escena', 'estado', 'etiquetas', 'notas', 'referencia', 'fecha'];
+  const ESTADOS = ['Guion', 'Generando', 'En revision', 'Listo'];
+  function leerAsig(texto) {
+    const regs = registros(texto); if (!regs.length) return [];
+    const cab = regs[0].map(x => x.trim().toLowerCase());
+    if (cab.indexOf('archivo') < 0 || cab.indexOf('fecha') < 0) return [];
+    const out = [];
+    for (const r of regs.slice(1)) {
+      const o = {}; COLS_ASIG.forEach(k => { const j = cab.indexOf(k); o[k] = j >= 0 && j < r.length ? r[j] : ''; });
+      for (const k of ['archivo', 'serie', 'episodio', 'escena', 'estado', 'fecha']) o[k] = o[k].trim();
+      o.referencia = o.referencia.trim().toLowerCase();
+      if (o.archivo) out.push(o);
+    }
+    return out;
+  }
+  // como la PC: todo entre comillas; los saltos de linea se quedan (\n) dentro de las comillas
+  const QA = s => '"' + String(s == null ? '' : s).replace(/\r\n|\r/g, '\n').replace(/"/g, '""') + '"';
+  function escribirAsig(filas) {
+    let s = '\uFEFF' + COLS_ASIG.join(',') + '\r\n';
+    for (const f of filas.slice().sort((a, b) => a.archivo.toLowerCase() < b.archivo.toLowerCase() ? -1 : a.archivo.toLowerCase() > b.archivo.toLowerCase() ? 1 : 0))
+      s += COLS_ASIG.map(k => QA(f[k])).join(',') + '\r\n';
+    return s;
+  }
+  // "12" / "e12a" -> E012A ; "" -> "" ; malo -> null (igual que la PC)
+  function normEscena(t) {
+    t = String(t || '').trim(); if (!t) return '';
+    const m = /^e?(\d{1,3})([a-z]?)$/i.exec(t); if (!m) return null;
+    const n = parseInt(m[1], 10); return n < 1 ? null : 'E' + pad(n, 3) + m[2].toUpperCase();
+  }
+  function normEpisodio(t) {
+    t = String(t || '').trim(); if (!t) return '';
+    const m = /^(?:ep)?(\d{1,2})$/i.exec(t); if (!m) return null;
+    const n = parseInt(m[1], 10); return n < 1 ? null : 'EP' + pad(n, 2);
+  }
+  // Une filas de Dropbox con las de aqui: gana la fecha mas nueva; nunca se pierden filas del otro lado.
+  function unirAsig(remotas, asigCambios) {
+    const m = new Map(); for (const f of remotas || []) m.set(f.archivo.toLowerCase(), f);
+    for (const k in asigCambios || {}) { const c = asigCambios[k], r = m.get(k); if (!r || !r.fecha || c.fecha >= r.fecha) m.set(k, c); }
+    return [...m.values()];
+  }
+  const fusionarAsig = (remotas, asigCambios) => escribirAsig(unirAsig(remotas, asigCambios));
+  function aplicarAsig(it, a) {
+    const serie = (a.serie || '').trim().toUpperCase();
+    const ep = serie ? normEpisodio(a.episodio) : ''; const e = ep === '' ? '' : normEscena(a.escena);
+    it.serie = serie; it.episodio = ep == null ? it.episodio : ep; it.escena = e == null ? it.escena : e;
+    if (ESTADOS.includes(a.estado)) it.estado = a.estado;
+    it.etiquetas = a.etiquetas || ''; it.notas = a.notas || '';
+    if (a.referencia === 'si') it.refManual = true; else if (a.referencia === 'no') it.refManual = false;
+    it.asigFecha = a.fecha;
+    // Listo = Aprobado: gana lo mas nuevo (la asignacion o la revision), como en la PC
+    const listo = it.estado === 'Listo', aprob = it.revision === R.Aprobado;
+    if (listo !== aprob) {
+      if (a.fecha && (!it.fecha || a.fecha > it.fecha)) { it.revision = listo ? R.Aprobado : ''; it.nota = ''; it.fecha = a.fecha; }
+      else it.estado = aprob ? 'Listo' : it.revision === R.NoMeGusta ? 'Generando' : 'En revision';
+    }
+  }
+  // Fila para asignaciones.csv con lo que tiene el item ahora
+  const filaAsig = (it, fecha) => ({ archivo: it.rel, serie: it.serie || '', episodio: it.episodio || '', escena: it.episodio ? it.escena || '' : '',
+    estado: it.estado || 'Generando', etiquetas: it.etiquetas || '', notas: it.notas || '', referencia: it.refManual ? 'si' : 'no', fecha });
+
   // ===== Catalogo =====
   // archivos: [{rel, ...extra}], filas: del CSV. Devuelve items con su resultado.
-  function construir(archivos, filas, cambios) {
+  function construir(archivos, filas, cambios, asigFilas, asigCambios) {
+    const asig = new Map(); for (const f of unirAsig(asigFilas, asigCambios)) asig.set(f.archivo.toLowerCase(), f);
     const porRuta = new Map(); for (const f of filas || []) porRuta.set(f.archivo.toLowerCase(), f);
     const items = archivos.filter(a => esMedio(a.rel)).map(a => {
       const f = porRuta.get(a.rel.toLowerCase());
@@ -102,6 +169,9 @@
       }
       const c = cambios && cambios[a.rel.toLowerCase()];
       if (c && (!it.fecha || c.fecha >= it.fecha)) { it.revision = c.revision; it.nota = c.nota || ''; it.fecha = c.fecha; it.pendiente = true; }
+      it.estado = it.revision === R.Aprobado ? 'Listo' : 'Generando'; it.etiquetas = ''; it.notas = ''; it.asigFecha = '';
+      const fa = asig.get(a.rel.toLowerCase());
+      if (fa) { aplicarAsig(it, fa); if (asigCambios && asigCambios[a.rel.toLowerCase()] === fa) it.pendiente = true; }
       return it;
     });
     calcularResultados(items);
@@ -132,8 +202,8 @@
   }
 
   // Une el CSV recien bajado de Dropbox con los cambios hechos en el telefono (lo mas nuevo gana).
-  function fusionar(archivos, filasRemotas, cambios, ahora) {
-    return escribirCsv(aFilas(construir(archivos, filasRemotas, cambios), ahora || fechaAhora()));
+  function fusionar(archivos, filasRemotas, cambios, ahora, asigFilas, asigCambios) {
+    return escribirCsv(aFilas(construir(archivos, filasRemotas, cambios, asigFilas, asigCambios), ahora || fechaAhora()));
   }
 
   function incluye(vista, resultado) {
@@ -148,7 +218,7 @@
   }
   function coincide(it, texto) {
     if (!texto || !texto.trim()) return true;
-    const todo = sin(`${it.rel} ${it.serie} ${it.episodio} ${it.escena} ${it.resultado} ${it.nota}`).toLowerCase();
+    const todo = sin(`${it.rel} ${it.serie} ${it.episodio} ${it.escena} ${it.resultado} ${it.nota} ${it.etiquetas || ''} ${it.notas || ''}`).toLowerCase();
     return texto.split(/\s+/).filter(Boolean).every(p => todo.includes(sin(p).toLowerCase()));
   }
   // ===== Fechas (v1.7): la fecha es la de modificacion del archivo en Dropbox =====
@@ -207,5 +277,5 @@
     });
   }
 
-  return { R, VISTAS, ESTIMADAS, CSV_NOMBRE, tipoDe, leerNombre, porCarpeta, esMedio, leerCsv, escribirCsv, fechaAhora, construir, calcularResultados, aFilas, fusionar, filtrar, progreso, sin, ORDENES, FILTROS_FECHA, textoFecha, diaDe, pasaFecha, agruparPorDia };
+  return { ASIG_NOMBRE, COLS_ASIG, ESTADOS, leerAsig, escribirAsig, normEscena, normEpisodio, unirAsig, fusionarAsig, filaAsig, R, VISTAS, ESTIMADAS, CSV_NOMBRE, tipoDe, leerNombre, porCarpeta, esMedio, leerCsv, escribirCsv, fechaAhora, construir, calcularResultados, aFilas, fusionar, filtrar, progreso, sin, ORDENES, FILTROS_FECHA, textoFecha, diaDe, pasaFecha, agruparPorDia };
 });

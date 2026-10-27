@@ -81,7 +81,57 @@ P('progreso', () => {
   P('filtro Hoy + tipo', () => eq(nombres(L.filtrar(its, { fecha: 'Hoy', tipo: 'Video' }, ahora)), ['EP01_E002']));
   P('agrupar por dia', () => eq(L.agruparPorDia(L.filtrar(its, { orden: 'Más nuevos primero' }, ahora), ahora).map(g => g.dia + ':' + g.items.length), ['Hoy:2', 'Ayer:1', '24 oct:1']));
 }
+// ===== Asignaciones (v1.8) =====
+{
+  const arch = ['CUBO_EP01_E001_toma01_v1.mp4', 'voz niña.mp3', 'CUBO_EP02_E005_v1.mp4'].map(rel => ({ rel }));
+  const fila = (archivo, o) => Object.assign({ archivo, serie: 'CUBO', episodio: 'EP01', escena: 'E001', estado: 'Generando', etiquetas: '', notas: '', referencia: '', fecha: '2026-10-27 09:00' }, o);
+  P('asig ida y vuelta comillas/acentos/comas/saltos', () => {
+    const f = [fila('voz niña.mp3', { etiquetas: 'cielo, "azul", niño', notas: 'línea 1\nlínea, 2', referencia: 'si' })];
+    const t = L.escribirAsig(f); assert(t.startsWith('\uFEFFarchivo,serie,episodio,escena,estado,etiquetas,notas,referencia,fecha\r\n'));
+    assert(t.includes('"voz niña.mp3","CUBO","EP01","E001","Generando","cielo, ""azul"", niño","línea 1\nlínea, 2","si","2026-10-27 09:00"'));
+    eq(L.leerAsig(t), f); eq(L.escribirAsig(L.leerAsig(t)), t);
+  });
+  P('asig formato igual a la PC (C#)', () => {
+    const pc = '\uFEFFarchivo,serie,episodio,escena,estado,etiquetas,notas,referencia,fecha\r\n"CUBO_EP01_E001_toma01_v1.mp4","CUBO","EP01","E001","Generando","cielo, ""azul"", niño","línea 1\nlínea, 2","no","2026-10-27 09:00"\r\n';
+    eq(L.escribirAsig(L.leerAsig(pc)), pc);
+  });
+  P('normalizar escena/episodio', () => { eq([L.normEscena('12'), L.normEscena('e12a'), L.normEscena(''), L.normEscena('doce'), L.normEscena('0')], ['E012', 'E012A', '', null, null]); eq([L.normEpisodio('3'), L.normEpisodio('ep7'), L.normEpisodio('x')], ['EP03', 'EP07', null]); });
+  P('gana lo mas nuevo y no se pierden filas de la PC', () => {
+    const rem = [fila('voz niña.mp3', { etiquetas: 'pc', fecha: '2026-10-27 10:00' }), fila('Otra/no-existe.mp4', {}), fila('CUBO_EP02_E005_v1.mp4', { etiquetas: 'pc nuevo', fecha: '2026-10-27 12:00' })];
+    const loc = { 'voz niña.mp3': fila('voz niña.mp3', { etiquetas: 'iphone', fecha: '2026-10-27 11:00' }), 'cubo_ep02_e005_v1.mp4': fila('CUBO_EP02_E005_v1.mp4', { etiquetas: 'iphone viejo', fecha: '2026-10-27 11:00' }) };
+    const u = L.leerAsig(L.fusionarAsig(rem, loc)); eq(u.length, 3);
+    eq(u.find(f => f.archivo === 'voz niña.mp3').etiquetas, 'iphone'); eq(u.find(f => f.archivo === 'CUBO_EP02_E005_v1.mp4').etiquetas, 'pc nuevo');
+    assert(u.some(f => f.archivo === 'Otra/no-existe.mp4'));
+  });
+  P('construir aplica asignacion', () => {
+    const it = L.construir(arch, [], {}, [fila('voz niña.mp3', { serie: 'cubo', episodio: '3', escena: '12a', estado: 'En revision', etiquetas: 'voz', notas: 'n', referencia: 'si' })]);
+    const v = it.find(x => x.rel === 'voz niña.mp3'); eq([v.serie, v.episodio, v.escena, v.estado, v.etiquetas, v.notas, v.resultado], ['CUBO', 'EP03', 'E012A', 'En revision', 'voz', 'n', 'Referencia']);
+    eq(it.find(x => x.rel.startsWith('CUBO_EP01')).estado, 'Generando');
+  });
+  P('sin episodio no hay escena; referencia no', () => {
+    const v = L.construir(arch, [], {}, [fila('CUBO_EP01_E001_toma01_v1.mp4', { episodio: '', escena: 'E009', referencia: 'no' })])[0];
+    eq([v.serie, v.episodio, v.escena, v.resultado], ['CUBO', '', '', 'Por revisar']);
+    eq(L.filaAsig(Object.assign({}, v, { escena: 'E004' }), 'x').escena, '');
+  });
+  const rev = (archivo, resultado, fecha) => ({ archivo, serie: 'CUBO', episodio: 'EP01', escena: 'E001', toma: '1', version: '1', resultado, nota: resultado === 'No me gusta' ? 'feo' : '', fecha });
+  const A = 'CUBO_EP01_E001_toma01_v1.mp4';
+  P('estado Listo mas nuevo = Aprobado', () => { const v = L.construir(arch, [], {}, [fila(A, { estado: 'Listo', fecha: '2026-10-27 10:00' })])[0]; eq([v.estado, v.resultado], ['Listo', 'Aprobado']); });
+  P('aprobado mas nuevo = Listo', () => { const v = L.construir(arch, [rev(A, 'Aprobado', '2026-10-27 11:00')], {}, [fila(A, { estado: 'Generando', fecha: '2026-10-27 10:00' })])[0]; eq([v.estado, v.resultado], ['Listo', 'Aprobado']); });
+  P('no me gusta mas nuevo saca de Listo', () => { const v = L.construir(arch, [rev(A, 'No me gusta', '2026-10-27 11:00')], {}, [fila(A, { estado: 'Listo', fecha: '2026-10-27 10:00' })])[0]; eq([v.estado, v.resultado], ['Generando', 'No me gusta']); });
+  P('En revision mas nuevo quita aprobado', () => {
+    const v = L.construir(arch, [rev(A, 'Aprobado', '2026-10-27 09:00')], {}, [fila(A, { estado: 'En revision', fecha: '2026-10-27 10:00' })])[0]; eq([v.estado, v.resultado], ['En revision', 'Por revisar']);
+    // y revisiones.csv que sube el iPhone lo refleja
+    assert(L.fusionar(arch, [rev(A, 'Aprobado', '2026-10-27 09:00')], {}, '2026-10-27 10:05', [fila(A, { estado: 'En revision', fecha: '2026-10-27 10:00' })]).includes('"' + A + '","CUBO","EP01","E001","1","1","Por revisar"'));
+  });
+  P('cambio local pendiente gana a remoto viejo', () => {
+    const v = L.construir(arch, [], {}, [fila(A, { etiquetas: 'pc', fecha: '2026-10-27 09:00' })], { [A.toLowerCase()]: fila(A, { etiquetas: 'iphone', fecha: '2026-10-27 09:30' }) })[0];
+    eq(v.etiquetas, 'iphone'); assert(v.pendiente);
+  });
+  P('buscar por etiquetas', () => eq(L.filtrar(L.construir(arch, [], {}, [fila(A, { etiquetas: 'volvo' })]), { vista: 'Todo', texto: 'volvo' }).length, 1));
+}
 // Si existe, compara con un CSV escrito por la app de la PC (C#)
 const fs = require('fs'), ruta = __dirname + '/csv-de-la-pc.csv';
 if (fs.existsSync(ruta)) P('CSV de la PC: ida y vuelta exacta', () => { const t = fs.readFileSync(ruta, 'utf8'); eq(L.escribirCsv(L.leerCsv(t)), t); });
+const rutaA = __dirname + '/asig-de-la-pc.csv';
+if (fs.existsSync(rutaA)) P('asignaciones.csv de la PC: ida y vuelta exacta', () => { const t = fs.readFileSync(rutaA, 'utf8'); const f = L.leerAsig(t); eq(f.length, 2); eq(f.find(x => x.archivo === 'voz niña.mp3').notas, 'línea 1\nlínea, 2'); eq(L.escribirAsig(f), t); });
 console.log(fallas ? `${fallas} FALLAS de ${n}` : `TODO BIEN (${n} pruebas)`); process.exit(fallas ? 1 : 0);

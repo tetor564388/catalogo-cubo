@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="estilos.css?v=17">
+<link rel="stylesheet" href="estilos.css?v=18">
 </head>
 <body>
 <header>
@@ -66,7 +66,7 @@
     </div>
     <h2>Cuenta</h2>
     <button id="btnSalir" class="grande">Salir de Dropbox</button>
-    <p class="suave pequeno">Catálogo CUBO para iPhone · v1.0</p>
+    <p class="suave pequeno">Catálogo CUBO para iPhone · v1.8</p>
   </section>
 </main>
 
@@ -82,6 +82,22 @@
     <button id="btnNoMeGusta" class="grande rojo">❌ No me gusta</button>
     <button id="btnQuitar" class="grande">↺ Quitar revisión</button>
   </div>
+  <div class="asig">
+    <h4>Asignar</h4>
+    <label>Serie<select id="aSerie"></select></label>
+    <div class="dos">
+      <label>Episodio<select id="aEpisodio"></select></label>
+      <label>Escena<input id="aEscena" inputmode="text" autocapitalize="characters" placeholder="12 o 12A"></label>
+    </div>
+    <label>Estado<select id="aEstado"></select></label>
+    <label>Etiquetas<input id="aEtiquetas" placeholder="separadas por comas"></label>
+    <label>Notas<textarea id="aNotas" rows="3" placeholder="Notas generales del archivo"></textarea></label>
+    <button id="btnRef" class="grande">📌 Marcar como referencia</button>
+    <button id="btnQuitarEp" class="grande">Quitar episodio y escena</button>
+    <p id="aSinGuardar" class="suave oculto">Hay cambios sin guardar.</p>
+    <button id="btnGuardarAsig" class="grande azul">💾 Guardar</button>
+    <p class="suave" style="font-size:13px">No se mueve ni se borra ningún archivo. La PC necesita v1.8 para verlo.</p>
+  </div>
 </div>
 
 <nav>
@@ -90,9 +106,9 @@
   <button data-p="pAjustes">⚙️<span>Ajustes</span></button>
 </nav>
 
-<script src="config.js?v=17"></script>
-<script src="logica.js?v=17"></script>
-<script src="dropbox.js?v=17"></script>
-<script src="app.js?v=17"></script>
+<script src="config.js?v=18"></script>
+<script src="logica.js?v=18"></script>
+<script src="dropbox.js?v=18"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>
